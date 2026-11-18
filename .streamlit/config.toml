@@ -1,0 +1,7 @@
+[server]
+# Maximum upload size in MB (Streamlit default is 200)
+maxUploadSize = 10
+
+[browser]
+# Do not send usage statistics to Streamlit
+gatherUsageStats = false
