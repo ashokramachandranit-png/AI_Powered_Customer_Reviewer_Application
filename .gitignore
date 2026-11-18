@@ -1,0 +1,22 @@
+
+# Environment variables
+.env
+
+# Virtual environment
+venv/
+.venv/
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Generated output
+output/*.csv
+output/*.md
+
+# VS Code
+.vscode/
+
+# Operating system
+.DS_Store
+Thumbs.db
