@@ -1,92 +1,116 @@
-
 import json
+import math
+import re
+from functools import lru_cache
+
 import pandas as pd
 
 from config import get_llm
 from prompts.weekly_insights_prompt import weekly_insights_prompt
 
 
-# Create OpenAI model
-llm = get_llm()
+# Limit how many urgent complaints are sent to the LLM (prompt size / cost)
+MAX_URGENT_REVIEWS_IN_PROMPT = 25
 
-# Build weekly insights chain
-weekly_insights_chain = weekly_insights_prompt | llm
+# Matches the <data> / </data> tags used in the prompt (any case/spacing)
+_DATA_TAG_PATTERN = re.compile(r"<\s*/?\s*data\s*>", re.IGNORECASE)
 
 
-def generate_weekly_insights(df: pd.DataFrame) -> str:
+@lru_cache(maxsize=1)
+def get_weekly_insights_chain():
+    """Build the weekly insights chain on first use."""
+
+    return weekly_insights_prompt | get_llm()
+
+
+def _successful_rows(df: pd.DataFrame) -> pd.DataFrame:
+    """Keep only reviews that the AI analysed successfully."""
+
+    if "analysis_status" in df.columns:
+        df = df[df["analysis_status"] == "success"]
+
+    return df
+
+
+def _round_or_none(value) -> float | None:
+    """Round a number to 2 decimals; return None for missing values."""
+
+    if value is None or (isinstance(value, float) and math.isnan(value)):
+        return None
+
+    return round(float(value), 2)
+
+
+def build_insights_payload(df: pd.DataFrame) -> dict:
+    """
+    Aggregate analysed reviews into compact statistics for the LLM.
+    """
+
+    data = _successful_rows(df).copy()
+
+    if data.empty:
+        raise ValueError("No successfully analysed reviews available for insights.")
+
+    data["date"] = pd.to_datetime(data["date"], errors="coerce")
+    data["rating"] = pd.to_numeric(data["rating"], errors="coerce")
+
+    dated = data.dropna(subset=["date"])
+
+    # Weekly volume and rating trend
+    weekly_trends = (
+        dated.groupby(dated["date"].dt.to_period("W"))
+        .agg(
+            total_reviews=("review_id", "count"),
+            average_rating=("rating", "mean"),
+            negative_reviews=("sentiment", lambda s: int((s == "Negative").sum())),
+        )
+        .reset_index()
+    )
+    weekly_trends["date"] = weekly_trends["date"].astype(str)
+    weekly_trends["average_rating"] = weekly_trends["average_rating"].map(_round_or_none)
+
+    # Urgent complaints (capped)
+    urgent = data[data["urgency"] == "HIGH"]
+    urgent_reviews = (
+        urgent[["review_id", "platform", "category", "summary"]]
+        .head(MAX_URGENT_REVIEWS_IN_PROMPT)
+        .to_dict(orient="records")
+    )
+
+    return {
+        "period_start": dated["date"].min().strftime("%Y-%m-%d") if not dated.empty else None,
+        "period_end": dated["date"].max().strftime("%Y-%m-%d") if not dated.empty else None,
+        "total_reviews": len(data),
+        "average_rating": _round_or_none(data["rating"].mean()),
+        "sentiment_distribution": data["sentiment"].value_counts().to_dict(),
+        "category_distribution": data["category"].value_counts().to_dict(),
+        "urgency_distribution": data["urgency"].value_counts().to_dict(),
+        "platform_distribution": data["platform"].value_counts().to_dict(),
+        "weekly_trends": weekly_trends.to_dict(orient="records"),
+        "high_urgency_review_count": len(urgent),
+        "high_urgency_reviews": urgent_reviews,
+    }
+
+
+def generate_weekly_insights(df: pd.DataFrame, chain=None) -> str:
     """
     Generate a weekly business insights report.
+
+    `chain` can be supplied for testing; by default the OpenAI chain is used.
     """
 
     if df.empty:
         raise ValueError("No review data available for insights.")
 
-    # Convert date column
-    data = df.copy()
-    data["date"] = pd.to_datetime(data["date"], errors="coerce")
+    payload = build_insights_payload(df)
 
-    # Overall statistics
-    total_reviews = len(data)
+    weekly_data = json.dumps(payload, indent=2, default=str)
 
-    sentiment_counts = (
-        data["sentiment"].value_counts().to_dict()
-    )
+    # Customer-derived summaries must not be able to close the <data> block
+    weekly_data = _DATA_TAG_PATTERN.sub("", weekly_data)
 
-    category_counts = (
-        data["category"].value_counts().to_dict()
-    )
+    chain = chain or get_weekly_insights_chain()
 
-    urgency_counts = (
-        data["urgency"].value_counts().to_dict()
-    )
-
-    platform_counts = (
-        data["platform"].value_counts().to_dict()
-    )
-
-    average_rating = round(
-        pd.to_numeric(data["rating"], errors="coerce").mean(), 2
-    )
-
-    # Weekly sentiment and category statistics
-    weekly_trends = (
-        data.groupby(data["date"].dt.to_period("W"))
-        .agg(
-            total_reviews=("review_id", "count"),
-            average_rating=("rating", "mean")
-        )
-        .round(2)
-        .reset_index()
-    )
-
-    # Urgent complaints
-    urgent_reviews = data[
-        data["urgency"] == "HIGH"
-    ][
-        ["review_id", "platform", "category", "summary"]
-    ].to_dict(orient="records")
-
-    # Prepare compact aggregated data
-    weekly_data = {
-        "total_reviews": total_reviews,
-        "average_rating": average_rating,
-        "sentiment_distribution": sentiment_counts,
-        "category_distribution": category_counts,
-        "urgency_distribution": urgency_counts,
-        "platform_distribution": platform_counts,
-        "weekly_trends": weekly_trends.to_dict(orient="records"),
-        "high_urgency_reviews": urgent_reviews,
-    }
-
-    # Generate AI insights
-    response = weekly_insights_chain.invoke(
-        {
-            "weekly_data": json.dumps(
-                weekly_data,
-                indent=2,
-                default=str
-            )
-        }
-    )
+    response = chain.invoke({"weekly_data": weekly_data})
 
     return response.content
