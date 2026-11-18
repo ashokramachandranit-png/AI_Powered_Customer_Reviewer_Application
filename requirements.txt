@@ -8,7 +8,7 @@
 # --- LangChain: chains, prompts, structured output, batch ---
 langchain-core>=1.8,<2            # ChatPromptTemplate, LCEL (|), .batch(), .with_retry()
 
-# --- LLM providers (OpenAI is the default) ---
+# --- LLM providers (OpenAI is the default; set LLM_PROVIDER to switch) ---
 langchain-openai>=1.8,<2          # ChatOpenAI  -> LLM_PROVIDER=openai
 langchain-google-genai>=4.5,<5    # ChatGoogleGenerativeAI -> LLM_PROVIDER=gemini   (optional)
 langchain-anthropic>=1.7,<2       # ChatAnthropic -> LLM_PROVIDER=anthropic          (optional)
@@ -24,7 +24,8 @@ streamlit>=1.67,<2                # Web dashboard
 plotly>=7.1,<8                    # Donut, bar and other interactive charts
 
 # --- Configuration ---
-python-dotenv>=1.2,<2             # Loads API keys and settings from .env
+pydantic-settings>=2.16,<3        # Typed settings from env vars / .env / Streamlit secrets
+python-dotenv>=1.2,<2             # .env file support for pydantic-settings
 
 # --- Testing ---
 pytest>=9.2,<10                   # Unit tests for each module

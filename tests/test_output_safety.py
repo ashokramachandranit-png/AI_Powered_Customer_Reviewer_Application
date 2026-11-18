@@ -1,6 +1,6 @@
 import pandas as pd
 
-from output_safety import make_csv_safe, sanitize_markdown
+from customer_reviews.core.safety import make_csv_safe, sanitize_markdown
 
 
 def test_formula_cells_are_escaped():
