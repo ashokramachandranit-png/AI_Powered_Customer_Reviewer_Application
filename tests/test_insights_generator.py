@@ -6,8 +6,8 @@ import pytest
 from langchain_core.messages import AIMessage
 from langchain_core.runnables import RunnableLambda
 
-import insights_generator
-from insights_generator import build_insights_payload, generate_weekly_insights
+from customer_reviews.services import insights as insights_generator
+from customer_reviews.services.insights import build_insights_payload, generate_weekly_insights
 
 
 def make_analysed_df():

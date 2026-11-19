@@ -1,7 +1,7 @@
 import pandas as pd
 import pytest
 
-from data_validator import validate_reviews, validate_reviews_with_report
+from customer_reviews.core.validation import validate_reviews, validate_reviews_with_report
 
 
 def make_df(rows):
