@@ -15,7 +15,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
-from pydantic import Field, SecretStr, ValidationError, model_validator
+from pydantic import Field, SecretStr, ValidationError, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -71,6 +71,30 @@ class Settings(BaseSettings):
     max_concurrency: int = Field(default=5, gt=0, le=50)
     max_retries: int = Field(default=3, gt=0, le=10)
 
+    # Saved history (SQLite). Relative paths are relative to the project folder.
+    persist_data: bool = True
+    database_path: str = "data/reviews.db"
+
+    # "Ask your reviews" chat: maximum reviews given to the model as context
+    chat_max_reviews: int = Field(default=300, gt=0, le=2000)
+
+    # Optional Slack incoming webhook for urgent-complaint alerts
+    slack_webhook_url: SecretStr | None = None
+
+    # Optional password protecting the whole app
+    app_password: SecretStr | None = None
+
+    @field_validator("slack_webhook_url")
+    @classmethod
+    def _slack_webhook_must_be_slack(cls, value):
+        """Only allow Slack webhook URLs, so the app cannot post data elsewhere."""
+
+        if value is not None:
+            url = value.get_secret_value().strip()
+            if url and not url.startswith("https://hooks.slack.com/"):
+                raise ValueError("must start with https://hooks.slack.com/")
+        return value
+
     @model_validator(mode="before")
     @classmethod
     def _empty_strings_mean_default(cls, values):
@@ -94,6 +118,29 @@ class Settings(BaseSettings):
         """Provider and model, e.g. 'openai/gpt-4.1-mini'."""
 
         return f"{self.llm_provider}/{self.model}"
+
+    @property
+    def database_file(self) -> Path | None:
+        """Absolute path of the SQLite database, or None when disabled."""
+
+        if not self.persist_data:
+            return None
+
+        path = Path(self.database_path).expanduser()
+
+        return path if path.is_absolute() else ENV_FILE.parent / path
+
+    @property
+    def slack_webhook(self) -> str | None:
+        secret = self.slack_webhook_url
+        value = secret.get_secret_value().strip() if secret else ""
+        return value or None
+
+    @property
+    def password(self) -> str | None:
+        secret = self.app_password
+        value = secret.get_secret_value() if secret else ""
+        return value or None
 
     @property
     def api_key_env_var(self) -> str:

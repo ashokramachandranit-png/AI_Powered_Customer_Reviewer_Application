@@ -13,15 +13,18 @@ def analysed():
         [
             {"review_id": "R1", "date": pd.Timestamp("2026-10-05"), "platform": "Google",
              "rating": 5, "sentiment": "Positive", "category": "Food Quality",
-             "urgency": "LOW", "summary": "Loved the curry", "review_text": "Great curry",
+             "urgency": "LOW", "summary": "Loved the curry", "language": "English",
+             "aspects": "Food Quality; Delivery", "review_text": "Great curry",
              "analysis_status": "success"},
             {"review_id": "R2", "date": pd.Timestamp("2026-10-13"), "platform": "Zomato",
              "rating": 1, "sentiment": "Negative", "category": "Refund",
-             "urgency": "HIGH", "summary": "Charged twice", "review_text": "Refund please",
+             "urgency": "HIGH", "summary": "Charged twice", "language": "Spanish",
+             "aspects": "Refund", "review_text": "Refund please",
              "analysis_status": "success"},
             {"review_id": "R3", "date": pd.Timestamp("2026-10-20"), "platform": "Zomato",
              "rating": 3, "sentiment": "Neutral", "category": "Delivery",
-             "urgency": "MEDIUM", "summary": "Okay", "review_text": "Cold food",
+             "urgency": "MEDIUM", "summary": "Okay", "language": "English",
+             "aspects": "Delivery", "review_text": "Cold food",
              "analysis_status": "success"},
             {"review_id": "R4", "date": pd.Timestamp("2026-10-21"), "platform": "Google",
              "rating": 2, "sentiment": None, "category": None, "urgency": None,
@@ -71,6 +74,7 @@ def test_text_search_is_case_insensitive_and_literal(analysed):
     [
         charts.sentiment_donut, charts.category_bar, charts.urgency_bar,
         charts.platform_bar, charts.weekly_sentiment_bar, charts.weekly_rating_line,
+        charts.aspects_bar, charts.language_bar,
     ],
 )
 def test_charts_build(analysed, builder, theme):
@@ -99,3 +103,10 @@ def test_bar_labels_are_not_clipped(analysed):
 
     assert fig.data[0].cliponaxis is False
     assert fig.layout.yaxis.range[1] > 2  # headroom above the tallest bar (2)
+
+
+def test_aspects_counts_every_topic(analysed):
+    fig = charts.aspects_bar(successful_reviews(analysed), "light")
+    counts = dict(zip(fig.data[0].y, fig.data[0].x, strict=True))
+
+    assert counts == {"Delivery": 2, "Food Quality": 1, "Refund": 1}

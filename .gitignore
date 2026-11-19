@@ -20,3 +20,6 @@ output/*.md
 # Operating system
 .DS_Store
 Thumbs.db
+
+# Local review history database
+data/

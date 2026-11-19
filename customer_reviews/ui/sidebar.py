@@ -42,6 +42,12 @@ def render_upload(settings: Settings):
             "for analysis."
         )
 
+        if settings.database_file is not None:
+            st.caption(
+                "Analysed reviews and replies are saved locally in "
+                f"`{settings.database_path}` (History tab)."
+            )
+
         if not settings.has_api_key():
             st.warning(
                 f"{settings.api_key_env_var} is not set. You can upload and "

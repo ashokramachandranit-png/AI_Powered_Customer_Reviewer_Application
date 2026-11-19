@@ -10,6 +10,7 @@ SETTINGS_ENV_VARS = [
     "LLM_PROVIDER", "MODEL_NAME", "TEMPERATURE",
     "OPENAI_API_KEY", "ANTHROPIC_API_KEY", "GOOGLE_API_KEY",
     "MAX_REVIEWS", "MAX_REVIEW_CHARS", "MAX_CONCURRENCY", "MAX_RETRIES",
+    "PERSIST_DATA", "DATABASE_PATH", "CHAT_MAX_REVIEWS", "SLACK_WEBHOOK_URL", "APP_PASSWORD",
 ]
 
 
@@ -29,6 +30,9 @@ def isolated_settings(monkeypatch, tmp_path):
     for name in SETTINGS_ENV_VARS:
         monkeypatch.delenv(name, raising=False)
 
+    # Never write to the real database during tests
+    monkeypatch.setenv("PERSIST_DATA", "false")
+
     clear_caches()
     yield
     clear_caches()
@@ -36,8 +40,10 @@ def isolated_settings(monkeypatch, tmp_path):
 
 def make_analysis(**overrides) -> ReviewAnalysis:
     values = {
+        "language": "English",
         "sentiment": "Negative",
         "category": "Delivery",
+        "aspects": ["Delivery", "Food Quality", "Delivery"],
         "urgency": "MEDIUM",
         "summary": "Late delivery.",
         "suggested_reply": "Sorry for the delay.",

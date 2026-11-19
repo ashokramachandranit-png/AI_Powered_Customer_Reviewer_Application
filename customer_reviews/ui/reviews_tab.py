@@ -3,7 +3,10 @@
 import pandas as pd
 import streamlit as st
 
+from customer_reviews.config import Settings
 from customer_reviews.core.safety import make_csv_safe
+from customer_reviews.services.alerts import build_urgent_alert, send_slack_alert
+from customer_reviews.ui.common import friendly_error
 
 
 URGENT_COLUMNS = [
@@ -11,8 +14,8 @@ URGENT_COLUMNS = [
 ]
 
 EXPLORE_COLUMNS = [
-    "review_id", "date", "platform", "rating", "sentiment", "category", "urgency",
-    "summary", "suggested_reply", "review_text",
+    "review_id", "date", "platform", "rating", "language", "sentiment", "category",
+    "aspects", "urgency", "summary", "suggested_reply", "review_text",
 ]
 
 COLUMN_CONFIG = {
@@ -23,7 +26,7 @@ COLUMN_CONFIG = {
 }
 
 
-def render_urgent_tab(df: pd.DataFrame) -> None:
+def render_urgent_tab(df: pd.DataFrame, settings: Settings) -> None:
     """All high-urgency complaints (sidebar filters do not apply)."""
 
     urgent = df[df["urgency"] == "HIGH"]
@@ -47,6 +50,24 @@ def render_urgent_tab(df: pd.DataFrame) -> None:
         mime="text/csv",
         icon=":material/download:",
     )
+
+    _render_slack_alert(urgent, settings)
+
+
+def _render_slack_alert(urgent: pd.DataFrame, settings: Settings) -> None:
+    webhook = settings.slack_webhook
+
+    if webhook is None:
+        st.caption("Tip: set SLACK_WEBHOOK_URL to send these complaints to a Slack channel.")
+        return
+
+    if st.button("Send alert to Slack", icon=":material/notifications:"):
+        try:
+            send_slack_alert(webhook, build_urgent_alert(urgent))
+        except Exception as e:
+            st.error(friendly_error("Sending the Slack alert", e))
+        else:
+            st.success(f"Slack alert sent for {len(urgent)} urgent complaint(s).")
 
 
 def render_explore_tab(filtered: pd.DataFrame, total_reviews: int) -> None:

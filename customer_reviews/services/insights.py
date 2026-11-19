@@ -42,6 +42,21 @@ def _round_or_none(value) -> float | None:
     return round(float(value), 2)
 
 
+def _optional_distributions(data: pd.DataFrame) -> dict:
+    """Language and topic counts, when the analysis includes them."""
+
+    result = {}
+
+    if "language" in data.columns:
+        result["language_distribution"] = data["language"].dropna().value_counts().to_dict()
+
+    if "aspects" in data.columns:
+        topics = data["aspects"].dropna().str.split("; ").explode()
+        result["topics_mentioned"] = topics[topics != ""].value_counts().to_dict()
+
+    return result
+
+
 def build_insights_payload(df: pd.DataFrame) -> dict:
     """
     Aggregate analysed reviews into compact statistics for the LLM.
@@ -87,6 +102,7 @@ def build_insights_payload(df: pd.DataFrame) -> dict:
         "category_distribution": data["category"].value_counts().to_dict(),
         "urgency_distribution": data["urgency"].value_counts().to_dict(),
         "platform_distribution": data["platform"].value_counts().to_dict(),
+        **_optional_distributions(data),
         "weekly_trends": weekly_trends.to_dict(orient="records"),
         "high_urgency_review_count": len(urgent),
         "high_urgency_reviews": urgent_reviews,

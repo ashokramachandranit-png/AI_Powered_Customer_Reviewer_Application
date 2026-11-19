@@ -2,7 +2,8 @@
 
 import streamlit as st
 
-from customer_reviews.config import ConfigError
+from customer_reviews.config import ConfigError, Settings
+from customer_reviews.storage import Database
 
 
 STATE_DEFAULTS = {
@@ -13,6 +14,7 @@ STATE_DEFAULTS = {
     "analysed_reviews": None,
     "weekly_report": None,
     "flash": None,
+    "chat_history": None,
 }
 
 # Prefix of widget keys that must be reset when a new file is uploaded
@@ -25,9 +27,49 @@ def init_state() -> None:
     for key, value in STATE_DEFAULTS.items():
         st.session_state.setdefault(key, value)
 
-    # Analysis results by content hash. Kept across uploads so re-uploading
-    # the same reviews does not call the LLM again.
+    # Analysis results by content hash, used when persistence is off. Kept
+    # across uploads so re-uploading the same reviews does not call the LLM.
     st.session_state.setdefault("analysis_cache", {})
+
+    # Reply workflow: {review_id: {"reply_status": ..., "reply_text": ...}}
+    st.session_state.setdefault("replies", {})
+
+
+@st.cache_resource(show_spinner=False)
+def _open_database(path: str) -> Database:
+    return Database(path)
+
+
+def get_database(settings: Settings) -> Database | None:
+    """The shared SQLite database, or None when persistence is off or fails."""
+
+    if settings.database_file is None:
+        return None
+
+    try:
+        return _open_database(str(settings.database_file))
+    except Exception as error:
+        st.sidebar.warning(
+            f"Saved history is unavailable ({type(error).__name__}). "
+            "Results will only be kept for this session."
+        )
+        return None
+
+
+def analysis_cache(db: Database | None):
+    """Persistent cache when the database is available, else per-session."""
+
+    return db.cache() if db is not None else st.session_state.analysis_cache
+
+
+def remember_results(analysed, settings: Settings, db: Database | None) -> None:
+    """Save analysed reviews and load their saved reply workflow state."""
+
+    if db is None:
+        return
+
+    db.save_analysed(analysed, settings.model_id)
+    st.session_state.replies.update(db.load_replies(list(analysed["review_id"])))
 
 
 def reset_for_new_file() -> None:

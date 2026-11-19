@@ -22,3 +22,22 @@ def test_invalid_config_shows_error(monkeypatch):
 
     assert not at.exception
     assert "MAX_REVIEWS" in at.error[0].value
+
+
+def test_password_gate(monkeypatch):
+    monkeypatch.setenv("APP_PASSWORD", "s3cret")
+
+    at = AppTest.from_file(APP_PATH, default_timeout=30).run()
+
+    assert not at.exception
+    assert at.subheader[0].value == "🔒 Sign in"
+    assert len(at.sidebar.warning) == 0  # nothing else rendered
+
+    at.text_input[0].input("wrong")
+    at.button[0].click().run()
+    assert at.error[0].value == "Incorrect password."
+
+    at.text_input[0].input("s3cret")
+    at.button[0].click().run()
+    assert at.session_state["authenticated"] is True
+    assert "Sign in" not in [s.value for s in at.subheader]

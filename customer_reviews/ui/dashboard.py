@@ -61,3 +61,10 @@ def render_dashboard_tab(
         _chart(charts.weekly_sentiment_bar(df, theme), "chart_weekly_sentiment")
     with col6:
         _chart(charts.weekly_rating_line(df, theme), "chart_weekly_rating")
+
+    if {"aspects", "language"} <= set(df.columns):
+        col7, col8 = st.columns(2)
+        with col7:
+            _chart(charts.aspects_bar(df, theme), "chart_aspects")
+        with col8:
+            _chart(charts.language_bar(df, theme), "chart_language")

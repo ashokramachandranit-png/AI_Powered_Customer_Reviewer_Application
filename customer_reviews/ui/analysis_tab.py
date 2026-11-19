@@ -5,16 +5,23 @@ import streamlit as st
 from customer_reviews.config import Settings
 from customer_reviews.core.safety import make_csv_safe
 from customer_reviews.services.analysis import estimate_usage, merge_results, process_reviews
-from customer_reviews.ui.common import friendly_error, set_flash, show_flash
+from customer_reviews.storage import Database
+from customer_reviews.ui.common import (
+    analysis_cache,
+    friendly_error,
+    remember_results,
+    set_flash,
+    show_flash,
+)
 
 
 RESULT_COLUMNS = [
-    "review_id", "date", "platform", "rating", "sentiment", "category",
-    "urgency", "summary", "suggested_reply", "review_text", "analysis_status",
+    "review_id", "date", "platform", "rating", "language", "sentiment", "category",
+    "aspects", "urgency", "summary", "suggested_reply", "review_text", "analysis_status",
 ]
 
 
-def _run(settings: Settings, reviews: list[dict], label: str) -> list[dict]:
+def _run(settings: Settings, db: Database | None, reviews: list[dict], label: str) -> list[dict]:
     """Run the analysis with a progress bar."""
 
     progress = st.progress(0.0, text=label)
@@ -24,7 +31,7 @@ def _run(settings: Settings, reviews: list[dict], label: str) -> list[dict]:
 
     results = process_reviews(
         reviews,
-        cache=st.session_state.analysis_cache,
+        cache=analysis_cache(db),
         model_id=settings.model_id,
         max_chars=settings.max_review_chars,
         max_concurrency=settings.max_concurrency,
@@ -36,7 +43,7 @@ def _run(settings: Settings, reviews: list[dict], label: str) -> list[dict]:
     return results
 
 
-def render_analysis_tab(settings: Settings) -> None:
+def render_analysis_tab(settings: Settings, db: Database | None) -> None:
     valid_df = st.session_state.validated_reviews
 
     if valid_df is None or valid_df.empty:
@@ -59,7 +66,7 @@ def render_analysis_tab(settings: Settings) -> None:
 
     estimate = estimate_usage(
         reviews,
-        cache=st.session_state.analysis_cache,
+        cache=analysis_cache(db),
         model_id=settings.model_id,
         max_chars=settings.max_review_chars,
     )
@@ -84,12 +91,13 @@ def render_analysis_tab(settings: Settings) -> None:
         icon=":material/auto_awesome:",
     ):
         try:
-            results = _run(settings, reviews, "Analysing…")
+            results = _run(settings, db, reviews, "Analysing…")
         except Exception as e:
             st.error(friendly_error("Review analysis", e))
         else:
             analysed = merge_results(to_analyse, results)
             st.session_state.analysed_reviews = analysed
+            remember_results(analysed, settings, db)
             st.session_state.weekly_report = None
 
             succeeded = int((analysed["analysis_status"] == "success").sum())
@@ -118,12 +126,14 @@ def render_analysis_tab(settings: Settings) -> None:
         if st.button("Retry failed reviews", icon=":material/refresh:"):
             try:
                 retry_results = _run(
-                    settings, failed_df.to_dict(orient="records"), "Retrying…"
+                    settings, db, failed_df.to_dict(orient="records"), "Retrying…"
                 )
             except Exception as e:
                 st.error(friendly_error("Retry", e))
             else:
-                st.session_state.analysed_reviews = merge_results(analysed, retry_results)
+                analysed = merge_results(analysed, retry_results)
+                st.session_state.analysed_reviews = analysed
+                remember_results(analysed, settings, db)
                 st.session_state.weekly_report = None
                 st.rerun()
 
@@ -140,6 +150,9 @@ def render_analysis_tab(settings: Settings) -> None:
             "review_text": st.column_config.TextColumn("Review", width="large"),
         },
     )
+
+    if db is not None:
+        st.caption("Results are saved to the local history database (History tab).")
 
     st.download_button(
         label="Download all results (CSV)",

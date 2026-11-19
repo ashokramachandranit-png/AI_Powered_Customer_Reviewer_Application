@@ -19,13 +19,18 @@ from customer_reviews.prompts.review_analysis import (
     SYSTEM_MESSAGE,
     review_analysis_prompt,
 )
-from customer_reviews.schemas import ReviewAnalysis
+from customer_reviews.schemas import MAX_ASPECTS, ReviewAnalysis
+
+# Separator for the aspects column (a list stored as text, CSV-friendly)
+ASPECT_SEPARATOR = "; "
 
 
 # Columns added to every review by the AI analysis
 ANALYSIS_COLUMNS = [
+    "language",
     "sentiment",
     "category",
+    "aspects",
     "urgency",
     "summary",
     "suggested_reply",
@@ -140,22 +145,29 @@ def _short_error(error: Exception) -> str:
 
 
 def _failed_row(review_id, error: Exception) -> dict:
-    return {
-        "review_id": review_id,
-        "sentiment": None,
-        "category": None,
-        "urgency": None,
-        "summary": None,
-        "suggested_reply": None,
-        "analysis_status": "failed",
-        "analysis_error": _short_error(error),
-    }
+    row = {column: None for column in ANALYSIS_COLUMNS}
+    row.update(
+        review_id=review_id,
+        analysis_status="failed",
+        analysis_error=_short_error(error),
+    )
+    return row
+
+
+def _join_aspects(analysis: dict) -> str:
+    """Main category first, no duplicates, at most MAX_ASPECTS."""
+
+    aspects = [analysis.get("category"), *(analysis.get("aspects") or [])]
+    unique = list(dict.fromkeys(a for a in aspects if a))
+
+    return ASPECT_SEPARATOR.join(unique[:MAX_ASPECTS])
 
 
 def _success_row(review_id, analysis: dict) -> dict:
     return {
         "review_id": review_id,
         **analysis,
+        "aspects": _join_aspects(analysis),
         "analysis_status": "success",
         "analysis_error": "",
     }

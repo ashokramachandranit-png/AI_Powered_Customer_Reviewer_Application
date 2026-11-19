@@ -214,3 +214,36 @@ def weekly_rating_line(df: pd.DataFrame, theme: str = "light") -> go.Figure:
     fig.update_xaxes(tickformat="%d %b", dtick=7 * 24 * 60 * 60 * 1000)
 
     return _style(fig, theme, "Average rating by week")
+
+
+def _single_series_hbar(counts: pd.Series, label: str, theme: str, title: str) -> go.Figure:
+    data = counts.rename_axis(label).reset_index(name="count").sort_values("count")
+
+    fig = px.bar(data, x="count", y=label, orientation="h", text="count")
+    fig.update_traces(
+        marker_color=_palette(theme)["series"],
+        hovertemplate="%{y}: %{x} reviews<extra></extra>",
+    )
+    _add_outside_labels(fig, data["count"].max() if not data.empty else 0, horizontal=True)
+    fig.update_layout(xaxis_title="Reviews", yaxis_title=None)
+
+    fig = _style(fig, theme, title)
+    fig.update_xaxes(showgrid=True, gridcolor=_palette(theme)["grid"])
+    fig.update_yaxes(showgrid=False)
+
+    return fig
+
+
+def aspects_bar(df: pd.DataFrame, theme: str = "light") -> go.Figure:
+    """How many reviews mention each topic (a review can mention several)."""
+
+    topics = df["aspects"].dropna().astype(str).str.split("; ").explode()
+    counts = topics[topics != ""].value_counts()
+
+    return _single_series_hbar(counts, "topic", theme, "Topics mentioned")
+
+
+def language_bar(df: pd.DataFrame, theme: str = "light") -> go.Figure:
+    counts = df["language"].dropna().value_counts()
+
+    return _single_series_hbar(counts, "language", theme, "Review languages")

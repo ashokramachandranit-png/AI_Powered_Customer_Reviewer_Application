@@ -14,10 +14,20 @@ reviews and the app will:
 - **Filter** reviews by platform, sentiment, category, urgency, date range and
   text search, and list **high-urgency complaints** for human follow-up
 - **Download** all results, filtered results, urgent complaints and the report
+- Detect each review's **language** and the **topics** it mentions; suggested
+  replies are written in the customer's language
+- **Reply workflow**: edit suggested replies, mark them Open / Approved / Sent /
+  Dismissed and export the approved ones
+- **Ask your reviews** questions in a chat ("What are the top 3 complaints?")
+- Send **Slack alerts** for high-urgency complaints (optional)
+- Keep a **saved history** of analysed reviews and replies in a local SQLite
+  database, with trends across uploads
+- Optional **password protection**
 
 The app is organised in tabs: **Data → Analysis → Dashboard → Insights →
-Urgent → Explore**. Results are cached per review, so re-analysing the same
-reviews with the same model does not call the LLM again.
+Urgent → Replies → Ask → Explore → History**. Results are cached per review
+(in the database, so across sessions), so re-analysing the same reviews with
+the same model does not call the LLM again.
 
 ## Quick start
 
@@ -74,6 +84,11 @@ Streamlit Cloud *Secrets* panel). Invalid values are reported in the app.
 | `MAX_REVIEW_CHARS`  | `4000`         | Longer reviews are truncated before sending    |
 | `MAX_CONCURRENCY`   | `5`            | Parallel requests to the LLM                   |
 | `MAX_RETRIES`       | `3`            | Attempts per review before it is marked failed |
+| `PERSIST_DATA`      | `true`         | Save history, replies and cache to SQLite      |
+| `DATABASE_PATH`     | `data/reviews.db` | Database file (relative to the project)     |
+| `CHAT_MAX_REVIEWS`  | `300`          | Reviews given to the Ask chat as context       |
+| `SLACK_WEBHOOK_URL` | –              | Slack incoming webhook for urgent alerts       |
+| `APP_PASSWORD`      | –              | Password required to open the app              |
 
 The maximum upload size (10 MB) is set in `.streamlit/config.toml`.
 
@@ -87,6 +102,7 @@ app.py                          Thin Streamlit entry point (page setup, tabs)
 customer_reviews/
   config.py                     Typed settings (pydantic-settings)
   llm.py                        LLM provider factory (OpenAI / Claude / Gemini)
+  storage.py                    SQLite: history, reply workflow, analysis cache
   schemas.py                    Pydantic model for the AI's structured output
   prompts/                      LangChain prompt templates (+ PROMPT_VERSION)
   core/
@@ -97,12 +113,16 @@ customer_reviews/
                                 caching, progress and usage estimates
     insights.py                 Aggregated statistics and the insights report
     filters.py                  Review filtering
+    chat.py                     "Ask your reviews" question answering
+    alerts.py                   Slack alerts for urgent complaints
   ui/
     common.py                   Session state, theme detection, messages
     sidebar.py                  Upload controls and filters
     charts.py                   Plotly chart builders (theme-aware colours)
-    data_tab.py, analysis_tab.py, dashboard.py,
-    insights_tab.py, reviews_tab.py   One module per tab
+    auth.py                     Optional password gate
+    data_tab.py, analysis_tab.py, dashboard.py, insights_tab.py,
+    reviews_tab.py, replies_tab.py, ask_tab.py, history_tab.py
+                                One module per tab
 sample_data/                    Example CSV
 tests/                          Pytest test suite (no API key needed)
 ```
@@ -132,6 +152,17 @@ reused (e.g. from a script or an API) and tested on their own.
 - Links and images are removed from the AI-generated report.
 - Suggested replies are AI-generated. Always review them before sending.
 - Never commit your `.env` file (it is listed in `.gitignore`).
+- **Saved history contains review text** (`data/reviews.db`, ignored by git).
+  Delete it from the History tab, or set `PERSIST_DATA=false` to keep nothing
+  on disk. On Streamlit Cloud the disk is temporary, so history is lost when
+  the app restarts.
+- **Set `APP_PASSWORD` before deploying** the app anywhere public: without it,
+  anyone with the URL can use your API key and see saved reviews.
+- Slack alerts are sent only when you click the button, only to
+  `hooks.slack.com`, and customer text is escaped so it cannot create links or
+  `@channel` mentions.
+- Chat answers and the report are generated from customer content: links and
+  images are removed before display.
 
 ## Development
 
